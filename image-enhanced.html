@@ -1,0 +1,449 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>AI Image Enhancer</title>
+  <style>
+    @import url('https://fonts.googleapis.com/css2?family=Poppins:wght@300;400;500;600&display=swap');
+
+    :root {
+      --primary-color: #007aff;
+      --background-color: #101010;
+      --surface-color: #1c1c1e;
+      --text-color: #f5f5f7;
+      --text-secondary: #a0a0a0;
+      --border-color: #3a3a3c;
+    }
+
+    * {
+      box-sizing: border-box;
+      margin: 0;
+      padding: 0;
+    }
+
+    body {
+      font-family: 'Poppins', sans-serif;
+      background-color: var(--background-color);
+      color: var(--text-color);
+      display: flex;
+      justify-content: center;
+      align-items: center; /* Vertically center the container */
+      min-height: 100vh;
+      padding: 15px; /* Reduced padding for mobile */
+    }
+
+    .container {
+      width: 100%;
+      max-width: 550px; /* Slightly reduced max-width */
+      background-color: var(--surface-color);
+      padding: 20px 25px; /* Reduced padding */
+      border-radius: 20px;
+      box-shadow: 0 15px 45px rgba(0, 0, 0, 0.3);
+      display: flex;
+      flex-direction: column;
+      gap: 20px; /* Reduced gap */
+    }
+
+    header h1 {
+      font-size: 26px; /* Slightly smaller font size */
+      font-weight: 600;
+      text-align: center;
+    }
+    
+    .image-panel {
+      width: 100%;
+      aspect-ratio: 16 / 10; /* Maintain a consistent aspect ratio */
+      min-height: 200px;
+      background-color: var(--background-color);
+      border-radius: 15px;
+      display: flex;
+      justify-content: center;
+      align-items: center;
+      position: relative;
+      overflow: hidden;
+      border: 2px dashed var(--border-color);
+      transition: border-color 0.3s, transform 0.3s;
+    }
+
+    .image-panel:has(#output-image.loaded) {
+        border: 2px solid var(--border-color);
+    }
+    
+    #placeholder {
+        color: var(--text-secondary);
+        text-align: center;
+        padding: 20px;
+    }
+    
+    #output-image {
+      max-width: 100%;
+      max-height: 100%; /* Fill the container */
+      border-radius: 12px;
+      display: none;
+      transition: filter 0.5s ease-in-out, opacity 0.5s;
+      object-fit: contain; /* Ensure image fits well */
+    }
+
+    /* Vignette Effect Overlay */
+    #output-image::after {
+        content: '';
+        position: absolute;
+        top: 0; left: 0; right: 0; bottom: 0;
+        border-radius: 12px;
+        background: radial-gradient(ellipse at center, rgba(0,0,0,0) 60%, rgba(0,0,0,0.4) 100%);
+        opacity: 0;
+        transition: opacity 0.5s ease;
+        pointer-events: none;
+    }
+
+    #output-image.ai-vignette::after {
+        opacity: 1;
+    }
+
+    /* --- Advanced Gemini-style Skeleton Loader --- */
+    .skeleton-loader {
+      position: absolute; top: 0; left: 0; width: 100%; height: 100%;
+      background-color: #101010;
+      overflow: hidden;
+      display: none;
+      z-index: 10;
+      opacity: 0;
+      transition: opacity 0.5s ease-in-out;
+    }
+    .skeleton-loader.active {
+        display: block;
+        opacity: 1;
+    }
+    .skeleton-loader::before {
+      content: '';
+      position: absolute;
+      top: 0; left: 0; width: 100%; height: 100%;
+      background:
+        radial-gradient(circle at 20% 20%, rgba(0, 122, 255, 0.25), transparent 40%),
+        radial-gradient(circle at 80% 70%, rgba(88, 86, 214, 0.25), transparent 40%),
+        radial-gradient(circle at 50% 50%, rgba(255, 255, 255, 0.05), transparent 30%);
+      animation: pulse-glow 4s infinite ease-in-out, spin-glow 10s infinite linear;
+    }
+    .skeleton-loader::after {
+      content: '';
+      position: absolute;
+      top: 0; left: -50%; width: 200%; height: 100%;
+      background: linear-gradient(90deg, transparent, rgba(255, 255, 255, 0.08), transparent);
+      animation: skeleton-shine 2s infinite linear;
+    }
+    @keyframes pulse-glow {
+      0%, 100% { transform: scale(1); opacity: 0.6; }
+      50% { transform: scale(1.3); opacity: 1; }
+    }
+    @keyframes spin-glow {
+      from { transform: rotate(0deg); }
+      to { transform: rotate(360deg); }
+    }
+    @keyframes skeleton-shine {
+      from { left: -100%; }
+      to { left: 100%; }
+    }
+
+
+    /* Controls */
+    .control-group {
+        display: flex;
+        flex-direction: column;
+        gap: 8px; /* Reduced gap */
+    }
+    
+    /* Upload Button */
+    input[type="file"] { display: none; }
+    .upload-btn {
+      padding: 12px; background-color: var(--primary-color); color: white; border-radius: 10px;
+      cursor: pointer; text-align: center; font-weight: 500; font-size: 16px; transition: background-color 0.3s;
+    }
+    .upload-btn:hover { background-color: #0056b3; }
+
+    /* AI Mode Toggle */
+    .ai-mode-control {
+        display: flex;
+        justify-content: space-between;
+        align-items: center;
+        background-color: var(--background-color);
+        padding: 10px 15px; /* Reduced padding */
+        border-radius: 10px;
+    }
+    .ai-mode-control label {
+        font-weight: 500;
+        font-size: 16px;
+    }
+    .ai-mode-control label span {
+        font-size: 1.2em;
+        vertical-align: middle;
+        margin-left: 5px;
+    }
+    .switch { position: relative; display: inline-block; width: 50px; height: 28px; }
+    .switch input { opacity: 0; width: 0; height: 0; }
+    .slider { position: absolute; cursor: pointer; top: 0; left: 0; right: 0; bottom: 0; background-color: #444; transition: .4s; border-radius: 28px; }
+    .slider:before { position: absolute; content: ""; height: 20px; width: 20px; left: 4px; bottom: 4px; background-color: white; transition: .4s; border-radius: 50%; }
+    input:checked + .slider { background-color: var(--primary-color); }
+    input:checked + .slider:before { transform: translateX(22px); }
+
+    /* Quality Slider */
+    .quality-control label {
+        display: flex; justify-content: space-between; font-size: 14px; color: var(--text-secondary);
+    }
+    input[type="range"] { -webkit-appearance: none; width: 100%; height: 6px; background: #444; outline: none; border-radius: 5px; margin-top: 5px; }
+    input[type="range"]::-webkit-slider-thumb { -webkit-appearance: none; appearance: none; width: 20px; height: 20px; background: var(--primary-color); cursor: pointer; border-radius: 50%; }
+    
+    /* Filter Presets */
+    .filter-presets { display: grid; grid-template-columns: repeat(3, 1fr); gap: 10px; }
+    .preset-btn {
+      padding: 8px; font-size: 14px; font-weight: 500; border-radius: 8px;
+      border: 1px solid var(--border-color); background-color: transparent; color: var(--text-color);
+      cursor: pointer; transition: all 0.2s;
+    }
+    .preset-btn:hover, .preset-btn.active { background-color: var(--primary-color); border-color: var(--primary-color); color: white; }
+
+    /* Action Buttons */
+    .action-buttons { display: grid; grid-template-columns: 1fr 1fr; gap: 15px; }
+    .action-buttons button, .download-btn {
+      padding: 12px; font-size: 16px; font-weight: 500; border-radius: 10px;
+      border: none; cursor: pointer; transition: all 0.3s;
+    }
+    .enhance-btn { background: var(--primary-color); color: white; }
+    .enhance-btn:hover:not(:disabled) { background: #0056b3; }
+    .enhance-btn:disabled { background: #555; cursor: not-allowed; opacity: 0.7; }
+
+    .reset-btn { background: #333; color: var(--text-color); }
+    .reset-btn:hover { background: #444; }
+
+    .download-btn { background: #30a14e; color: white; }
+    .download-btn:hover:not(:disabled) { background: #2bac49; }
+    .download-btn:disabled { background: #555; cursor: not-allowed; opacity: 0.7; }
+  </style>
+</head>
+<body>
+
+  <div class="container">
+    <header>
+      <h1>AI Image Enhancer</h1>
+    </header>
+    
+    <div class="image-panel">
+        <div id="placeholder">
+          <h3>Your Image Preview</h3>
+          <p>Use the button below to get started</p>
+        </div>
+        <img id="output-image" src="" alt="Image Preview">
+        <div class="skeleton-loader" id="loader"></div>
+    </div>
+
+    <div class="control-group">
+      <input type="file" id="upload-input" accept="image/*">
+      <label for="upload-input" class="upload-btn">Upload Image</label>
+    </div>
+
+    <div class="control-group">
+      <div class="ai-mode-control">
+        <label for="ai-mode-toggle">AI Smart Enhance <span>✨</span></label>
+        <label class="switch">
+          <input type="checkbox" id="ai-mode-toggle">
+          <span class="slider"></span>
+        </label>
+      </div>
+    </div>
+      
+    <div class="control-group" id="manual-controls">
+      <div class="quality-control">
+        <label for="quality-slider">Manual Quality: <span id="quality-value">50</span>%</label>
+        <input type="range" id="quality-slider" min="0" max="100" value="50">
+      </div>
+      <div class="filter-presets">
+        <button class="preset-btn" data-preset="vivid">Vivid</button>
+        <button class="preset-btn" data-preset="clarity">Clarity</button>
+        <button class="preset-btn" data-preset="natural">Natural</button>
+      </div>
+    </div>
+    
+    <div class="action-buttons">
+      <button onclick="enhanceImage()" class="enhance-btn">Enhance</button>
+      <button onclick="resetImage()" class="reset-btn">Reset</button>
+    </div>
+    
+    <button onclick="downloadImage()" class="download-btn" id="download-btn" disabled>Download Image</button>
+  </div>
+
+  <script>
+    const imagePreview = document.getElementById("output-image");
+    const uploadInput = document.getElementById("upload-input");
+    const qualitySlider = document.getElementById("quality-slider");
+    const qualityValueLabel = document.getElementById("quality-value");
+    const placeholder = document.getElementById("placeholder");
+    const loader = document.getElementById("loader");
+    const enhanceBtn = document.querySelector(".enhance-btn");
+    const downloadBtn = document.getElementById("download-btn");
+    const aiModeToggle = document.getElementById("ai-mode-toggle");
+    const presetBtns = document.querySelectorAll(".preset-btn");
+    const manualControls = document.getElementById("manual-controls");
+
+    let originalSrc = "";
+    let currentFilterString = "";
+    let activePreset = null;
+
+    // --- Event Listeners ---
+    aiModeToggle.addEventListener('change', () => {
+        manualControls.style.display = aiModeToggle.checked ? 'none' : 'flex';
+    });
+
+    qualitySlider.addEventListener("input", () => {
+      qualityValueLabel.textContent = qualitySlider.value;
+      if(activePreset) {
+        presetBtns.forEach(b => b.classList.remove('active'));
+        activePreset = null;
+      }
+    });
+
+    uploadInput.addEventListener("change", function() {
+      const file = this.files[0];
+      if (file) {
+        const reader = new FileReader();
+        reader.onload = (e) => {
+          originalSrc = e.target.result;
+          imagePreview.src = originalSrc;
+          imagePreview.style.display = "block";
+          imagePreview.classList.add("loaded");
+          placeholder.style.display = "none";
+          downloadBtn.disabled = true; // Can only download after enhancing
+          resetImage();
+        };
+        reader.readAsDataURL(file);
+      }
+    });
+
+    presetBtns.forEach(btn => {
+      btn.addEventListener('click', () => {
+        const preset = btn.dataset.preset;
+        if (activePreset === preset) {
+            btn.classList.remove('active');
+            activePreset = null;
+        } else {
+            presetBtns.forEach(b => b.classList.remove('active'));
+            btn.classList.add('active');
+            activePreset = preset;
+        }
+      });
+    });
+
+    // --- Core Functions ---
+    function enhanceImage() {
+      if (!originalSrc) {
+        alert("Please upload an image first!");
+        return;
+      }
+
+      enhanceBtn.disabled = true;
+      loader.classList.add('active');
+      imagePreview.style.opacity = "0.5";
+
+      setTimeout(() => {
+        applyEnhancements();
+        loader.classList.remove('active');
+        imagePreview.style.opacity = "1";
+        enhanceBtn.disabled = false;
+        downloadBtn.disabled = false;
+      }, 2000); // Simulate advanced AI processing time
+    }
+
+    function applyEnhancements() {
+      let filters = {};
+
+      if (aiModeToggle.checked) {
+        // **Enhanced AI Mode**
+        filters = { 
+            brightness: 1.05, 
+            contrast: 1.2, 
+            saturate: 1.25, // More vibrant
+            sharpness: 0.3, // Added sharpness
+            vignette: true 
+        };
+      } else if (activePreset) {
+        // Apply filters based on selected preset
+        switch(activePreset) {
+            case 'vivid': filters = { contrast: 1.25, saturate: 1.4 }; break;
+            case 'clarity': filters = { contrast: 1.2, sharpness: 0.5 }; break;
+            case 'natural': filters = { saturate: 1.15, contrast: 1.1 }; break;
+        }
+      } else {
+          // **Enhanced Manual Mode** (clearer & cleaner)
+          const q = parseInt(qualitySlider.value) / 100.0;
+          filters = {
+              brightness: 1 + q * 0.1,
+              contrast: 1 + q * 0.3,
+              saturate: 1 + q * 0.25,
+              sharpness: q * 0.2, // Add sharpness based on quality
+          };
+      }
+      
+      currentFilterString = buildCssFilterString(filters);
+      imagePreview.style.filter = currentFilterString;
+      imagePreview.classList.toggle('ai-vignette', filters.vignette === true);
+    }
+    
+    function buildCssFilterString(filters) {
+        let str = '';
+        if (filters.brightness) str += `brightness(${filters.brightness}) `;
+        if (filters.contrast) str += `contrast(${filters.contrast}) `;
+        if (filters.saturate) str += `saturate(${filters.saturate}) `;
+        // Using drop-shadow for a pseudo-sharpen effect, as `filter: sharpen()` isn't supported.
+        if (filters.sharpness) str += `drop-shadow(0 0 ${filters.sharpness}px rgba(0,0,0,0.5)) `;
+        return str.trim();
+    }
+
+    function resetImage() {
+      imagePreview.style.filter = "none";
+      imagePreview.style.opacity = "1";
+      imagePreview.classList.remove('ai-vignette');
+      qualitySlider.value = 50;
+      qualityValueLabel.textContent = "50";
+      aiModeToggle.checked = false;
+      manualControls.style.display = 'flex';
+      currentFilterString = "";
+      activePreset = null;
+      presetBtns.forEach(b => b.classList.remove('active'));
+      downloadBtn.disabled = true;
+    }
+
+    function downloadImage() {
+      if (!originalSrc || downloadBtn.disabled) return;
+      
+      const canvas = document.createElement('canvas');
+      const ctx = canvas.getContext('2d');
+      const img = new Image();
+      img.src = originalSrc;
+
+      img.onload = () => {
+        canvas.width = img.naturalWidth;
+        canvas.height = img.naturalHeight;
+        
+        ctx.filter = currentFilterString;
+        ctx.drawImage(img, 0, 0);
+
+        if (aiModeToggle.checked) {
+            const gradient = ctx.createRadialGradient(
+                canvas.width / 2, canvas.height / 2, canvas.height * 0.2,
+                canvas.width / 2, canvas.height / 2, canvas.width * 0.7
+            );
+            gradient.addColorStop(0, 'rgba(0,0,0,0)');
+            gradient.addColorStop(1, 'rgba(0,0,0,0.4)');
+            ctx.fillStyle = gradient;
+            ctx.fillRect(0, 0, canvas.width, canvas.height);
+        }
+
+        const link = document.createElement('a');
+        link.download = 'enhanced-image.jpeg';
+        link.href = canvas.toDataURL('image/jpeg', 0.95); // Higher quality JPEG
+        link.click();
+      };
+    }
+  </script>
+
+</body>
+</html>
